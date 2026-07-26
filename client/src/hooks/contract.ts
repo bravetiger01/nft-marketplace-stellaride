@@ -440,3 +440,62 @@ export async function getCollectionNfts(name: string) {
   ]);
   return scValToNative(result) as string[];
 }
+
+// ── Token Balance ───────────────────────────────────────────────────────────
+
+export async function getTokenBalance(
+  tokenAddress: string,
+  account: string
+): Promise<bigint> {
+  const tokenContract = new StellarContract(tokenAddress);
+  const contractAddr = tokenContract.call("balance", toScValAddress(account));
+
+  const dummyKeypair = Keypair.random();
+  const simulationAccount = {
+    accountId: () => dummyKeypair.publicKey(),
+    sequenceNumber: () => BigInt(0),
+    incrementSequenceNumber: () => {},
+  } as any;
+
+  const txBuilder = new TransactionBuilder(simulationAccount, {
+    fee: "0",
+    networkPassphrase: NETWORK_PASSPHRASE,
+  });
+  const builtTx = txBuilder
+    .addOperation(contractAddr)
+    .setTimeout(TimeoutInfinite)
+    .build();
+
+  const simResult = await server.simulateTransaction(builtTx);
+  if ("result" in simResult && simResult.result) {
+    return BigInt(scValToNative(simResult.result.retval) as string);
+  }
+  return BigInt(0);
+}
+
+export async function getTokenDecimals(tokenAddress: string): Promise<number> {
+  const tokenContract = new StellarContract(tokenAddress);
+  const contractAddr = tokenContract.call("decimals");
+
+  const dummyKeypair = Keypair.random();
+  const simulationAccount = {
+    accountId: () => dummyKeypair.publicKey(),
+    sequenceNumber: () => BigInt(0),
+    incrementSequenceNumber: () => {},
+  } as any;
+
+  const txBuilder = new TransactionBuilder(simulationAccount, {
+    fee: "0",
+    networkPassphrase: NETWORK_PASSPHRASE,
+  });
+  const builtTx = txBuilder
+    .addOperation(contractAddr)
+    .setTimeout(TimeoutInfinite)
+    .build();
+
+  const simResult = await server.simulateTransaction(builtTx);
+  if ("result" in simResult && simResult.result) {
+    return scValToNative(simResult.result.retval) as number;
+  }
+  return 7; // default Stellar asset decimals
+}

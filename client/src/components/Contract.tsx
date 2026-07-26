@@ -9,10 +9,6 @@ import {
   delist,
   getListings,
   buy,
-  makeOffer,
-  getOffer,
-  hasOffer,
-  cancelOffer,
   getUserNfts,
   createCollection,
   getCollection,
@@ -39,15 +35,37 @@ interface ListingData {
   listed_at: number;
 }
 
+interface Toast {
+  id: number;
+  type: "success" | "error" | "info";
+  message: string;
+  hash?: string;
+}
+
 // ── Tabs ────────────────────────────────────────────────────────────────────
 
 type Tab = "browse" | "mint" | "my-nfts" | "collections";
+
+let toastId = 0;
 
 // ── Component ───────────────────────────────────────────────────────────────
 
 export default function Contract() {
   const [tab, setTab] = useState<Tab>("browse");
   const [address, setAddress] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  const addToast = (
+    type: "success" | "error" | "info",
+    message: string,
+    hash?: string
+  ) => {
+    const id = ++toastId;
+    setToasts((prev) => [...prev, { id, type, message, hash }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 8000);
+  };
 
   useEffect(() => {
     getWalletAddress().then(setAddress);
@@ -55,6 +73,34 @@ export default function Contract() {
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-8">
+      {/* Toast Notifications */}
+      <div className="fixed right-4 top-20 z-[100] flex flex-col gap-3">
+        {toasts.map((t) => (
+          <div
+            key={t.id}
+            className={`max-w-md rounded-xl border px-5 py-4 shadow-2xl backdrop-blur-md ${
+              t.type === "success"
+                ? "border-green-800 bg-green-950/90 text-green-200"
+                : t.type === "error"
+                ? "border-red-800 bg-red-950/90 text-red-200"
+                : "border-zinc-700 bg-zinc-900/90 text-zinc-200"
+            }`}
+          >
+            <p className="text-sm font-medium">{t.message}</p>
+            {t.hash && (
+              <a
+                href={`https://stellar.expert/explorer/testnet/tx/${t.hash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-block truncate font-mono text-xs text-violet-400 underline hover:text-violet-300"
+              >
+                View on Explorer: {t.hash.slice(0, 16)}...
+              </a>
+            )}
+          </div>
+        ))}
+      </div>
+
       {/* Tab Navigation */}
       <div className="mb-8 flex gap-2 border-b border-zinc-800 pb-4">
         {(["browse", "mint", "my-nfts", "collections"] as Tab[]).map((t) => (
@@ -79,17 +125,35 @@ export default function Contract() {
       </div>
 
       {/* Tab Content */}
-      {tab === "browse" && <BrowseTab address={address} />}
-      {tab === "mint" && <MintTab address={address} />}
-      {tab === "my-nfts" && <MyNftsTab address={address} />}
-      {tab === "collections" && <CollectionsTab address={address} />}
+      {tab === "browse" && (
+        <BrowseTab address={address} addToast={addToast} />
+      )}
+      {tab === "mint" && (
+        <MintTab address={address} addToast={addToast} />
+      )}
+      {tab === "my-nfts" && (
+        <MyNftsTab address={address} addToast={addToast} />
+      )}
+      {tab === "collections" && (
+        <CollectionsTab address={address} addToast={addToast} />
+      )}
     </div>
   );
 }
 
 // ── Browse Tab ──────────────────────────────────────────────────────────────
 
-function BrowseTab({ address }: { address: string | null }) {
+function BrowseTab({
+  address,
+  addToast,
+}: {
+  address: string | null;
+  addToast: (
+    type: "success" | "error" | "info",
+    message: string,
+    hash?: string
+  ) => void;
+}) {
   const [listings, setListings] = useState<ListingData[]>([]);
   const [loading, setLoading] = useState(true);
   const [buying, setBuying] = useState<string | null>(null);
@@ -110,14 +174,15 @@ function BrowseTab({ address }: { address: string | null }) {
   }, [load]);
 
   const handleBuy = async (tokenId: string) => {
-    if (!address) return alert("Connect wallet first");
+    if (!address) return addToast("error", "Connect wallet first");
     setBuying(tokenId);
     try {
-      await buy(address, tokenId);
-      alert("NFT purchased!");
+      const result = await buy(address, tokenId);
+      const hash = result?.hash;
+      addToast("success", "NFT purchased successfully!", hash);
       load();
     } catch (e: any) {
-      alert(`Purchase failed: ${e?.message || e}`);
+      addToast("error", `Purchase failed: ${e?.message || e}`);
     }
     setBuying(null);
   };
@@ -126,7 +191,9 @@ function BrowseTab({ address }: { address: string | null }) {
     <div>
       <h2 className="mb-6 text-2xl font-bold text-white">Marketplace</h2>
       {loading ? (
-        <div className="py-20 text-center text-zinc-400">Loading listings...</div>
+        <div className="py-20 text-center text-zinc-400">
+          Loading listings...
+        </div>
       ) : listings.length === 0 ? (
         <div className="py-20 text-center text-zinc-500">
           No listings yet. Mint an NFT and list it for sale!
@@ -165,9 +232,11 @@ function ListingCard({
     getNft(listing.token_id).then(setNft).catch(console.error);
   }, [listing.token_id]);
 
-  const shortSeller = `${listing.seller.slice(0, 6)}...${listing.seller.slice(-4)}`;
+  const shortSeller = `${listing.seller.slice(0, 6)}...${listing.seller.slice(
+    -4
+  )}`;
   const isOwner = address === listing.seller;
-  const priceXlm = Number(listing.price) / 10_000_000;
+  const priceDisplay = Number(listing.price) / 10_000_000;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-700">
@@ -186,7 +255,7 @@ function ListingCard({
         <p className="mb-1 text-xs text-zinc-500">Seller: {shortSeller}</p>
         <div className="mt-4 flex items-center justify-between">
           <span className="text-xl font-bold text-white">
-            {priceXlm.toLocaleString()} XLM
+            {priceDisplay.toLocaleString()} tokens
           </span>
           {!isOwner && address && (
             <button
@@ -208,7 +277,17 @@ function ListingCard({
 
 // ── Mint Tab ────────────────────────────────────────────────────────────────
 
-function MintTab({ address }: { address: string | null }) {
+function MintTab({
+  address,
+  addToast,
+}: {
+  address: string | null;
+  addToast: (
+    type: "success" | "error" | "info",
+    message: string,
+    hash?: string
+  ) => void;
+}) {
   const [tokenId, setTokenId] = useState("");
   const [metadataUri, setMetadataUri] = useState("");
   const [collection, setCollection] = useState("Default");
@@ -216,22 +295,24 @@ function MintTab({ address }: { address: string | null }) {
   const [minting, setMinting] = useState(false);
 
   const handleMint = async () => {
-    if (!address) return alert("Connect wallet first");
-    if (!tokenId || !metadataUri) return alert("Fill in all fields");
+    if (!address)
+      return addToast("error", "Connect your wallet to mint.");
+    if (!tokenId || !metadataUri)
+      return addToast("error", "Fill in Token ID and Metadata URI.");
     setMinting(true);
     try {
-      await mint(
+      const result = await mint(
         address,
         tokenId,
         metadataUri,
         collection,
         parseInt(royaltyBps) || 0
       );
-      alert("NFT minted!");
+      addToast("success", `NFT "${tokenId}" minted successfully!`, result?.hash);
       setTokenId("");
       setMetadataUri("");
     } catch (e: any) {
-      alert(`Mint failed: ${e?.message || e}`);
+      addToast("error", `Mint failed: ${e?.message || e}`);
     }
     setMinting(false);
   };
@@ -282,7 +363,17 @@ function MintTab({ address }: { address: string | null }) {
 
 // ── My NFTs Tab ─────────────────────────────────────────────────────────────
 
-function MyNftsTab({ address }: { address: string | null }) {
+function MyNftsTab({
+  address,
+  addToast,
+}: {
+  address: string | null;
+  addToast: (
+    type: "success" | "error" | "info",
+    message: string,
+    hash?: string
+  ) => void;
+}) {
   const [nftIds, setNftIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [listTokenId, setListTokenId] = useState("");
@@ -312,14 +403,20 @@ function MyNftsTab({ address }: { address: string | null }) {
     if (!address || !listTokenId || !listPrice) return;
     setListing(true);
     try {
-      const priceLamports = BigInt(Math.floor(parseFloat(listPrice) * 10_000_000));
-      await list(address, address, listTokenId, priceLamports);
-      alert("NFT listed!");
+      const priceLamports = BigInt(
+        Math.floor(parseFloat(listPrice) * 10_000_000)
+      );
+      const result = await list(address, address, listTokenId, priceLamports);
+      addToast(
+        "success",
+        `NFT "${listTokenId}" listed for ${listPrice} tokens!`,
+        result?.hash
+      );
       setListTokenId("");
       setListPrice("");
       load();
     } catch (e: any) {
-      alert(`List failed: ${e?.message || e}`);
+      addToast("error", `List failed: ${e?.message || e}`);
     }
     setListing(false);
   };
@@ -328,13 +425,22 @@ function MyNftsTab({ address }: { address: string | null }) {
     if (!address || !transferTokenId || !transferTo) return;
     setTransferring(true);
     try {
-      await transferNft(address, address, transferTo, transferTokenId);
-      alert("NFT transferred!");
+      const result = await transferNft(
+        address,
+        address,
+        transferTo,
+        transferTokenId
+      );
+      addToast(
+        "success",
+        `NFT "${transferTokenId}" transferred!`,
+        result?.hash
+      );
       setTransferTokenId("");
       setTransferTo("");
       load();
     } catch (e: any) {
-      alert(`Transfer failed: ${e?.message || e}`);
+      addToast("error", `Transfer failed: ${e?.message || e}`);
     }
     setTransferring(false);
   };
@@ -371,7 +477,7 @@ function MyNftsTab({ address }: { address: string | null }) {
           />
           <input
             type="number"
-            placeholder="Price (XLM)"
+            placeholder="Price (token units)"
             value={listPrice}
             onChange={(e) => setListPrice(e.target.value)}
             className="w-40 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:border-violet-500 focus:outline-none"
@@ -438,7 +544,17 @@ function NftMiniCard({ tokenId }: { tokenId: string }) {
 
 // ── Collections Tab ─────────────────────────────────────────────────────────
 
-function CollectionsTab({ address }: { address: string | null }) {
+function CollectionsTab({
+  address,
+  addToast,
+}: {
+  address: string | null;
+  addToast: (
+    type: "success" | "error" | "info",
+    message: string,
+    hash?: string
+  ) => void;
+}) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [imageUri, setImageUri] = useState("");
@@ -448,16 +564,27 @@ function CollectionsTab({ address }: { address: string | null }) {
   const [collectionNfts, setCollectionNfts] = useState<string[]>([]);
 
   const handleCreate = async () => {
-    if (!address || !name) return alert("Connect wallet and enter a name");
+    if (!address || !name)
+      return addToast("error", "Connect wallet and enter a name.");
     setCreating(true);
     try {
-      await createCollection(address, address, name, description, imageUri);
-      alert("Collection created!");
+      const result = await createCollection(
+        address,
+        address,
+        name,
+        description,
+        imageUri
+      );
+      addToast(
+        "success",
+        `Collection "${name}" created!`,
+        result?.hash
+      );
       setName("");
       setDescription("");
       setImageUri("");
     } catch (e: any) {
-      alert(`Create failed: ${e?.message || e}`);
+      addToast("error", `Create failed: ${e?.message || e}`);
     }
     setCreating(false);
   };
@@ -488,9 +615,24 @@ function CollectionsTab({ address }: { address: string | null }) {
           <p className="text-zinc-400">Connect your wallet first.</p>
         ) : (
           <div className="space-y-3">
-            <Field label="Name" value={name} onChange={setName} placeholder="e.g. Stellar Punks" />
-            <Field label="Description" value={description} onChange={setDescription} placeholder="Description..." />
-            <Field label="Image URI" value={imageUri} onChange={setImageUri} placeholder="ipfs://..." />
+            <Field
+              label="Name"
+              value={name}
+              onChange={setName}
+              placeholder="e.g. Stellar Punks"
+            />
+            <Field
+              label="Description"
+              value={description}
+              onChange={setDescription}
+              placeholder="Description..."
+            />
+            <Field
+              label="Image URI"
+              value={imageUri}
+              onChange={setImageUri}
+              placeholder="ipfs://..."
+            />
             <button
               onClick={handleCreate}
               disabled={creating}
