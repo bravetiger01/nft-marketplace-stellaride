@@ -128,19 +128,20 @@ cargo test
 
 ### Wallet Connected State
 
-![Wallet Connected](./screenshots/wallet-connected.png)
+<img width="1469" height="878" alt="Screenshot 2026-07-26 at 8 16 08 PM" src="https://github.com/user-attachments/assets/efd7261d-46c4-4fde-a0f0-0dd3a6c2996a" />
+
 
 The navbar displays the connected wallet address (truncated) with a green connection indicator and the user's payment token balance.
 
 ### Balance Displayed
+<img width="1469" height="878" alt="Screenshot 2026-07-26 at 8 16 08 PM" src="https://github.com/user-attachments/assets/e13c3ece-755b-4c20-b006-9a8e97e95240" />
 
-![Balance Displayed](./screenshots/balance-displayed.png)
 
 When a wallet is connected, the payment token balance is shown in the navbar alongside the wallet address. Balances update on page load and after transactions.
 
 ### Successful Testnet Transaction
+<img width="1469" height="878" alt="Screenshot 2026-07-26 at 8 16 08 PM" src="https://github.com/user-attachments/assets/595233d1-709d-433d-80a0-aa7f0e190903" />
 
-![Successful Transaction](./screenshots/transaction-success.png)
 
 After a successful on-chain transaction (mint, list, buy, or transfer), a toast notification appears in the top-right corner showing the operation result with a clickable link to view the transaction on Stellar Expert.
 
